@@ -5,7 +5,15 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+    The app allows the user to:
+        - Input their pet's basic information first like name, breed, age etc
+        - Track each time they take their pet on a walk + the route and duration
+        - Track their medical history + meds + vaccinations + vet appointment dates
+        - Put in remainders for when it needs grooming/ hair cut etc.
+
 - What classes did you include, and what responsibilities did you assign to each?
+    Attributes- dog basic information, walk info, medical info
+    Methods- Remind that it is time for walks, time for grooming, time for vet appts/ vaccinations
 
 **b. Design changes**
 

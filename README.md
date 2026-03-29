@@ -41,3 +41,36 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+### Testing PawPal+
+
+```bash
+python -m pytest tests/ -v
+```
+
+#### What the tests cover
+
+| Test | File | What it checks |
+|---|---|---|
+| `test_mark_complete_changes_status` | `tests/test_pawpal.py` | `Task.mark_complete()` flips `is_completed` from `False` → `True` |
+| `test_add_task_increases_count` | `tests/test_pawpal.py` | `Pet.add_task()` correctly appends to the pet's task list |
+
+#### What is NOT yet tested
+
+The following behaviours are implemented but have no automated coverage:
+
+- `Task.next_occurrence()` — recurring task rescheduling with `timedelta`
+- `Scheduler.complete_task()` — auto-appending the next recurrence on completion
+- `Scheduler.conflict_warnings()` — same-pet and cross-pet conflict detection
+- `Scheduler.get_pending_tasks()` — sort order and filtering by status
+- `Owner.get_pet()` / `remove_pet()` — lookup and removal edge cases
+
+#### Confidence Level
+
+⭐⭐ (2 / 5)
+
+The two existing tests pass cleanly and confirm basic object mutation works.
+However, every algorithm added in this project — recurring scheduling, conflict
+detection, filtering, and sorting — is entirely untested. A bug in any of those
+paths would not be caught by the test suite today.
+

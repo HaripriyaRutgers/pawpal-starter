@@ -12,6 +12,13 @@
         - Put in remainders for when it needs grooming/ hair cut etc.
 
 - What classes did you include, and what responsibilities did you assign to each?
+    Pet is the central class — everything links back to it
+    WalkRecord- captures each individual walk with route, duration, and distance
+    MedicalProfile-  groups all health-related data into one place, acting as a container for meds, vaccines, and vet visits
+    Medication, Vaccination, and VetAppointment are separate classes but under MedicalProfile since they each have distinct fields and lifecycles
+    Reminder- is a flexible, reusable class — supports one-time or recurring reminders for walks, grooming, or vet appointments, driven by a type field (e.g. "grooming", "walk", "vet")
+    
+
     Attributes- dog basic information, walk info, medical info
     Methods- Remind that it is time for walks, time for grooming, time for vet appts/ vaccinations
 

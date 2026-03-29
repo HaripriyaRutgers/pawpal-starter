@@ -27,6 +27,8 @@
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
 
+Yes changes were made for better organization and viewability.
+
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
@@ -34,12 +36,16 @@
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+
+Conflicts and time sensitive remainders
 - How did you decide which constraints mattered most?
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+
+The Scheduler chose always-correct over always-fast — acceptable for a single-owner pet app, but would need a caching layer before scaling to many pets or frequent polling.
 
 ---
 

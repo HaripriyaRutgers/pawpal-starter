@@ -54,11 +54,15 @@ luna.add_task(Task(
     frequency="daily",
 ))
 
+# Pin shared times so conflict detection sees identical datetime values
+SAME_PET_TIME  = in_hours(2)   # both Luna tasks → same-pet conflict
+CROSS_PET_TIME = in_hours(6)   # one Luna + one Mochi task → cross-pet conflict
+
 luna.add_task(Task(
     task_id="t2",
     description="Give heartworm medication",
     task_type="medication",
-    scheduled_time=in_hours(2),         # 2 hours from now
+    scheduled_time=SAME_PET_TIME,       # 2 hours from now
     frequency="monthly",
 ))
 
@@ -70,12 +74,21 @@ luna.add_task(Task(
     frequency="weekly",
 ))
 
+# Luna — same-pet conflict: pinned to the exact same datetime as t2
+luna.add_task(Task(
+    task_id="t6",
+    description="Rabies booster shot",
+    task_type="vaccination",
+    scheduled_time=SAME_PET_TIME,       # identical to t2 → same-pet conflict
+    frequency="once",
+))
+
 # Mochi's tasks
 mochi.add_task(Task(
     task_id="t4",
     description="Evening walk around the block",
     task_type="walk",
-    scheduled_time=in_hours(6),         # 6 hours from now
+    scheduled_time=CROSS_PET_TIME,      # 6 hours from now
     frequency="daily",
 ))
 
@@ -85,6 +98,15 @@ mochi.add_task(Task(
     task_type="vet",
     scheduled_time=in_hours(24),        # tomorrow
     frequency="once",
+))
+
+# Cross-pet conflict: Luna pinned to the same datetime as Mochi's t4
+luna.add_task(Task(
+    task_id="t7",
+    description="Nail trim at the groomer",
+    task_type="grooming",
+    scheduled_time=CROSS_PET_TIME,      # identical to t4 → cross-pet conflict
+    frequency="monthly",
 ))
 
 # ---------------------------------------------------------------------------
@@ -176,6 +198,19 @@ print("=" * 52)
 from pawpal_system import Scheduler
 scheduler = Scheduler(owner)
 scheduler.run_reminders()
+
+print()
+print("=" * 52)
+print("  CONFLICT DETECTION")
+print("=" * 52)
+# conflict_warnings() returns strings — never raises, safe to call always.
+# window_minutes=0 flags tasks at the exact same scheduled time.
+warnings = scheduler.conflict_warnings(window_minutes=0)
+if warnings:
+    for w in warnings:
+        print(f"  {w}")
+else:
+    print("  No scheduling conflicts found.")
 
 print()
 print("=" * 52)

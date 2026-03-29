@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -28,6 +29,32 @@ class Task:
     def snooze(self, hours: int = 1) -> None:
         """Push the scheduled time forward by the given number of hours."""
         self.scheduled_time += timedelta(hours=hours)
+
+    def next_occurrence(self) -> Optional["Task"]:
+        """Return a new Task for the next recurrence based on frequency.
+        Returns None if frequency is 'once'.
+
+        Base time logic:
+          - On-time task  → scheduled_time + delta  (preserve the original cadence)
+          - Overdue task  → datetime.now() + delta   (reschedule forward, not into the past)
+        """
+        _deltas = {
+            "daily":   timedelta(days=1),
+            "weekly":  timedelta(weeks=1),
+            "monthly": timedelta(days=30),
+        }
+        delta = _deltas.get(self.frequency)
+        if delta is None:
+            return None
+        # If the task is overdue, anchor from now so the next occurrence is always future.
+        base = max(self.scheduled_time, datetime.now())
+        return Task(
+            task_id=str(uuid.uuid4())[:8],
+            description=self.description,
+            task_type=self.task_type,
+            scheduled_time=base + delta,
+            frequency=self.frequency,
+        )
 
     def __str__(self) -> str:
         """Return a human-readable summary string for the task."""
@@ -346,12 +373,87 @@ class Scheduler:
             print(f"  [{pet.name}] {task}")
 
     def complete_task(self, task_id: str) -> bool:
-        """Find a task by ID across all pets, mark it complete, and return True; False if not found."""
-        for _, task in self._all_tasks():
+        """Mark a task complete and auto-schedule the next occurrence for recurring tasks."""
+        for pet, task in self._all_tasks():
             if task.task_id == task_id:
                 task.mark_complete()
+                next_task = task.next_occurrence()
+                if next_task:
+                    pet.add_task(next_task)
                 return True
         return False
+
+    def get_tasks_for_pet(self, pet_name: str) -> list[tuple[Pet, Task]]:
+        """Return all tasks (pending and completed) for a specific pet by name."""
+        return [(pet, task) for pet, task in self._all_tasks() if pet.name == pet_name]
+
+    def get_completed_tasks(self) -> list[tuple[Pet, Task]]:
+        """Return all completed tasks across every pet, sorted by scheduled time."""
+        completed = [(pet, task) for pet, task in self._all_tasks() if task.is_completed]
+        return sorted(completed, key=lambda pair: pair[1].scheduled_time)
+
+    def detect_conflicts(self, window_minutes: int = 30) -> list[tuple[Pet, Task, Task]]:
+        """Return (pet, task_a, task_b) triples where two pending tasks for the same
+        pet are scheduled within window_minutes of each other."""
+        conflicts = []
+        window = timedelta(minutes=window_minutes)
+        for pet in self.owner.pets:
+            pending = sorted(
+                [t for t in pet.tasks if not t.is_completed],
+                key=lambda t: t.scheduled_time,
+            )
+            for i in range(len(pending)):
+                for j in range(i + 1, len(pending)):
+                    diff = abs(pending[i].scheduled_time - pending[j].scheduled_time)
+                    if diff <= window:
+                        conflicts.append((pet, pending[i], pending[j]))
+        return conflicts
+
+    def conflict_warnings(self, window_minutes: int = 0) -> list[str]:
+        """Lightweight conflict scan across ALL pets (same-pet and cross-pet).
+
+        Strategy — compare every pair of pending tasks once (O(n²) on pending count,
+        fine for typical pet schedules with tens of tasks):
+          • Same-pet conflict  → two tasks for the same pet overlap in time
+          • Cross-pet conflict → tasks for different pets overlap, meaning the owner
+                                 cannot physically attend both at once
+
+        Always returns a list of human-readable warning strings.
+        Never raises an exception — callers can safely ignore an empty list.
+        """
+        warnings: list[str] = []
+        window = timedelta(minutes=window_minutes)
+
+        # Flat list of all pending (pet, task) pairs across every pet
+        all_pending = [
+            (pet, task)
+            for pet, task in self._all_tasks()
+            if not task.is_completed
+        ]
+
+        # Compare each unique pair exactly once
+        for i in range(len(all_pending)):
+            for j in range(i + 1, len(all_pending)):
+                pet_a, task_a = all_pending[i]
+                pet_b, task_b = all_pending[j]
+                diff = abs(task_a.scheduled_time - task_b.scheduled_time)
+                if diff <= window:
+                    time_str = task_a.scheduled_time.strftime("%b %d  %I:%M %p")
+                    if pet_a.name == pet_b.name:
+                        warnings.append(
+                            f"⚠️  SAME-PET CONFLICT — {pet_a.name}: "
+                            f"[{task_a.task_type}] '{task_a.description}' and "
+                            f"[{task_b.task_type}] '{task_b.description}' "
+                            f"both scheduled at {time_str}"
+                        )
+                    else:
+                        warnings.append(
+                            f"⚠️  CROSS-PET CONFLICT — "
+                            f"{pet_a.name} [{task_a.task_type}] and "
+                            f"{pet_b.name} [{task_b.task_type}] "
+                            f"both scheduled at {time_str} — owner cannot attend both"
+                        )
+        return warnings
 
     def summary(self) -> None:
         """Print a full task summary grouped by pet."""

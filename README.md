@@ -44,9 +44,6 @@ pip install -r requirements.txt
 
 ### Testing PawPal+
 
-```bash
-python -m pytest tests/ -v
-```
 
 #### What the tests cover
 
@@ -65,12 +62,32 @@ The following behaviours are implemented but have no automated coverage:
 - `Scheduler.get_pending_tasks()` — sort order and filtering by status
 - `Owner.get_pet()` / `remove_pet()` — lookup and removal edge cases
 
-#### Confidence Level
 
-⭐⭐ (2 / 5)
 
-The two existing tests pass cleanly and confirm basic object mutation works.
-However, every algorithm added in this project — recurring scheduling, conflict
-detection, filtering, and sorting — is entirely untested. A bug in any of those
-paths would not be caught by the test suite today.
+### Features
+
+#### Owner & Pet Management
+- **Owner profile** — store name, email, and phone; register and remove multiple pets
+- **Per-pet data** — track breed, age, gender, weight, walk history, reminders, and a full medical profile (medications, vaccinations, vet appointments)
+
+#### Task Scheduling
+- **Sorting by time** — all pending tasks are sorted chronologically using Python's Timsort via `Scheduler.get_pending_tasks()`, so the schedule always reads earliest-first
+- **Daily recurrence** — completing a `daily` task auto-schedules the next one using `timedelta(days=1)`; `weekly` uses `timedelta(weeks=1)`; `monthly` uses `timedelta(days=30)` (`Task.next_occurrence()`)
+- **Smart overdue rescheduling** — if a recurring task is overdue, the next occurrence anchors from `datetime.now()` rather than the past due date, guaranteeing the new task is always in the future
+- **Snooze** — push any task or reminder forward in time without losing it (`Task.snooze()`, `Reminder.snooze()`)
+
+#### Filtering & Querying
+- **Filter by status** — retrieve only pending (`Scheduler.get_pending_tasks()`) or only completed tasks (`Scheduler.get_completed_tasks()`), both returned sorted by time
+- **Filter by pet** — isolate all tasks for a single named pet across the schedule (`Scheduler.get_tasks_for_pet()`)
+- **Filter by type** — pull every `walk`, `vet`, `medication`, etc. task across all pets at once (`Scheduler.get_tasks_by_type()`)
+
+#### Conflict Detection
+- **Same-pet conflict warnings** — flags when two tasks for the same pet are scheduled at the same time; displayed as a red `st.error` in the UI with a tip to snooze one
+- **Cross-pet conflict warnings** — flags when tasks for different pets overlap, meaning the owner cannot attend both; displayed as a yellow `st.warning` with a suggestion to delegate
+- **Non-crashing design** — `Scheduler.conflict_warnings()` always returns a plain list of strings and never raises an exception, so the app continues working regardless of conflicts
+
+#### Streamlit UI
+- **Sortable schedule table** — `st.dataframe` renders the full schedule with Pet / Due / Type / Task / Repeats / Status columns, sortable in the browser
+- **Filterable task view** — dropdowns let the owner filter by pet and by status (Pending / Completed / All) before generating the schedule
+- **Actionable conflict banners** — conflicts surface inside collapsible `st.expander` panels with colour-coded severity and a plain-English tip for each one
 

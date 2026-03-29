@@ -149,6 +149,7 @@ else:
             st.success(f"Task **'{new_task.description}'** added to {target_pet.name}!")
 
     # --- Filter controls ---
+    scheduler = Scheduler(owner)
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         filter_pet = st.selectbox(
@@ -159,37 +160,34 @@ else:
             "Filter by status", ["Pending", "Completed", "All"], key="filter_status"
         )
 
-    # Build filtered task list
-    def _status_match(task: Task) -> bool:
-        if filter_status == "Pending":
-            return not task.is_completed
-        if filter_status == "Completed":
-            return task.is_completed
-        return True
-
-    filtered_pets = (
-        [p for p in owner.pets if p.name == filter_pet]
-        if filter_pet != "All pets"
-        else owner.pets
-    )
-
-    any_shown = False
-    for pet in filtered_pets:
-        tasks = sorted(
-            [t for t in pet.tasks if _status_match(t)],
-            key=lambda x: x.scheduled_time,
+    # Delegate filtering and sorting to Scheduler methods
+    if filter_status == "Pending":
+        pairs = scheduler.get_pending_tasks()           # sorted by time
+    elif filter_status == "Completed":
+        pairs = scheduler.get_completed_tasks()         # sorted by time
+    else:
+        pairs = sorted(
+            scheduler._all_tasks(),
+            key=lambda pair: pair[1].scheduled_time,
         )
-        if tasks:
-            any_shown = True
-            st.markdown(f"**{pet.name}'s {filter_status.lower()} tasks:**")
-            for t in tasks:
-                due_str = t.scheduled_time.strftime("%b %d  %I:%M %p")
-                status_icon = "✅" if t.is_completed else ("🔴 OVERDUE" if t.is_due() else "")
-                st.markdown(
-                    f"&nbsp;&nbsp;`{due_str}` &nbsp; **[{t.task_type}]** {t.description} "
-                    f"*({t.frequency})* {status_icon}"
-                )
-    if not any_shown:
+
+    if filter_pet != "All pets":
+        pairs = [(pet, t) for pet, t in pairs if pet.name == filter_pet]
+
+    if pairs:
+        rows = [
+            {
+                "Pet":         pet.name,
+                "Due":         t.scheduled_time.strftime("%b %d  %I:%M %p"),
+                "Type":        t.task_type.capitalize(),
+                "Description": t.description,
+                "Frequency":   t.frequency,
+                "Status":      "✅ Done" if t.is_completed else ("🔴 Overdue" if t.is_due() else "🕐 Upcoming"),
+            }
+            for pet, t in pairs
+        ]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
         st.info("No tasks match the selected filters.")
 
 st.divider()
@@ -207,30 +205,46 @@ if st.button("Generate schedule"):
     if not owner.pets or not any(p.tasks for p in owner.pets):
         st.warning("Add at least one pet and one task first.")
     else:
-        scheduler = Scheduler(owner)                    # <-- Phase 2 class
-        pending   = scheduler.get_pending_tasks()       # <-- Phase 2 method
+        sched   = Scheduler(owner)
+        pending = sched.get_pending_tasks()             # sorted by scheduled_time
 
-        # Conflict detection
-        conflicts = scheduler.detect_conflicts(window_minutes=30)
-        if conflicts:
-            st.warning(f"⚠️ {len(conflicts)} scheduling conflict(s) detected (tasks within 30 min of each other):")
-            for pet, ta, tb in conflicts:
-                st.markdown(
-                    f"&nbsp;&nbsp;**{pet.name}**: `{ta.task_type}` @ "
-                    f"{ta.scheduled_time:%I:%M %p} conflicts with `{tb.task_type}` @ "
-                    f"{tb.scheduled_time:%I:%M %p}"
-                )
+        # --- Conflict warnings (strings from conflict_warnings()) ---
+        all_warnings = sched.conflict_warnings(window_minutes=0)
+        same_pet  = [w for w in all_warnings if "SAME-PET"   in w]
+        cross_pet = [w for w in all_warnings if "CROSS-PET"  in w]
 
+        if same_pet:
+            with st.expander(f"🚨 {len(same_pet)} same-pet conflict(s) — action required", expanded=True):
+                for w in same_pet:
+                    # Strip the leading emoji/label — Streamlit error adds its own styling
+                    clean = w.replace("⚠️  SAME-PET CONFLICT — ", "")
+                    st.error(f"**Scheduling clash:** {clean}\n\n"
+                             "_Tip: snooze one task or spread them at least 30 min apart._")
+
+        if cross_pet:
+            with st.expander(f"⚠️ {len(cross_pet)} cross-pet conflict(s) — review recommended", expanded=True):
+                for w in cross_pet:
+                    clean = w.replace("⚠️  CROSS-PET CONFLICT — ", "")
+                    st.warning(f"**Owner time clash:** {clean}\n\n"
+                               "_Tip: ask a helper to take one pet, or reschedule._")
+
+        if not all_warnings:
+            st.success("No scheduling conflicts — your plan looks clear!")
+
+        # --- Schedule table ---
         if not pending:
-            st.success("All tasks are complete — nothing left to do!")
+            st.success("All tasks are complete — nothing left to do today!")
         else:
-            st.markdown(f"### {owner.name or 'Your'}'s schedule ({len(pending)} task(s))")
-            for pet, task in pending:
-                due_str  = task.scheduled_time.strftime("%b %d  %I:%M %p")
-                is_due   = task.is_due()
-                label    = "🔴 OVERDUE" if is_due else f"🕐 {due_str}"
-                recurring_badge = " ♻️" if task.frequency != "once" else ""
-                st.markdown(
-                    f"**{pet.name}** &nbsp;|&nbsp; {label} &nbsp;|&nbsp; "
-                    f"`{task.task_type}` — {task.description} *({task.frequency})*{recurring_badge}"
-                )
+            st.markdown(f"### {owner.name or 'Your'}'s schedule — {len(pending)} task(s)")
+            rows = [
+                {
+                    "Pet":         pet.name,
+                    "Due":         task.scheduled_time.strftime("%b %d  %I:%M %p"),
+                    "Type":        task.task_type.capitalize(),
+                    "Task":        task.description,
+                    "Repeats":     task.frequency,
+                    "Status":      "🔴 Overdue" if task.is_due() else "🕐 Upcoming",
+                }
+                for pet, task in pending
+            ]
+            st.dataframe(rows, use_container_width=True, hide_index=True)
